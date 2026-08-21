@@ -1,0 +1,17 @@
+# Config del Supabase CLI para desarrollo local.
+# Ver: https://supabase.com/docs/guides/local-development
+# Correr `supabase init` dentro de esta carpeta genera el resto de archivos
+# necesarios (docker compose, etc). Este archivo es un punto de partida.
+
+project_id = "calorie-tracker"
+
+[api]
+enabled = true
+port = 54321
+
+[db]
+port = 54322
+
+[studio]
+enabled = true
+port = 54323
