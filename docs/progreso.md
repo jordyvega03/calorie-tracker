@@ -74,6 +74,14 @@
 - Se agregó **vista previa** de la foto elegida (con `URL.createObjectURL`, liberado con `URL.revokeObjectURL` al cambiar/cerrar) antes de analizarla, con botón para quitarla y elegir otra.
 - **Probado en el navegador**: subida por "Elegir de galería" muestra la vista previa correctamente, el botón "Analizar foto" se habilita, y "quitar foto" regresa a los dos botones limpio (el input se resetea).
 
+### Post-MVP — Buscar alimentos con IA cuando no están en el catálogo
+- Se evaluaron 3 fuentes para autocompletar alimentos que el usuario nunca ha registrado (ej. "aguacate"): USDA FoodData Central (base de datos real, pero en inglés y sin comida guatemalteca), Open Food Facts (sin API key, pero pensada para productos empacados con código de barras, no alimentos genéricos crudos), y **reutilizar Gemini** (ya integrado, entiende español y comida local sin traducir, cero registro nuevo). Se eligió Gemini — decisión del usuario, consciente de que es una estimación de IA y no una base de datos certificada, igual que el resto de la app.
+- `lib/ai/gemini.ts`: la llamada HTTP a Gemini se factorizó a un helper común `callGemini(parts)`; `analyzeImageWithGemini` (fotos) y la nueva `estimateFoodNutrition(nombre)` (solo texto) lo reutilizan.
+- `buscarAlimentoExterno` (Server Action en `diario/actions.ts`): llama a `estimateFoodNutrition`, devuelve `null` si Gemini no reconoce el alimento. No guarda nada en `foods` directamente — eso lo sigue haciendo `upsertFoodIfNew` cuando el usuario confirma y guarda la entrada (mismo criterio de todo el proyecto: ninguna estimación de IA se persiste sin pasar por el usuario).
+- `ManualEntryForm.tsx`: cuando la búsqueda local en `foods` no encuentra nada (mientras se escribe), aparece una fila **"Buscar '&lt;nombre&gt;' con IA"** en el dropdown. Al hacer clic, autocompleta el formulario igual que una sugerencia local (mismo mecanismo de recálculo al cambiar los gramos). Si Gemini no lo reconoce o falla la llamada, muestra un mensaje y el usuario completa los datos a mano.
+- **Cache automática, tal como se pidió**: la primera vez que se busca un alimento nuevo pasa por Gemini; al guardar la entrada, `upsertFoodIfNew` lo deja en la tabla `foods`. La segunda vez que se escribe el mismo nombre, aparece como sugerencia **local** instantánea — no vuelve a llamar a la IA.
+- **Probado en el navegador** con "aguacate": sin match local → apareció "Buscar 'aguacate' con IA" → Gemini devolvió 160 kcal / 2g proteína / 9g carbos / 15g grasas por 100g (coincide con tablas nutricionales reales) → se guardó la entrada → al escribir "aguac" de nuevo, apareció como sugerencia local instantánea sin pasar por IA. De paso se confirmó que la app maneja bien un 503 transitorio de Gemini ("high demand") — mostró el mensaje de "no encontrado" en vez de romperse, y reintentar funcionó.
+
 ## Cómo mandar cambios (flujo normal de trabajo)
 
 Con el repo en GitHub y Vercel conectado, mandar un cambio a producción es:
