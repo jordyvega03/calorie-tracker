@@ -62,6 +62,13 @@
 - **Fix de build de producción**: el primer deploy falló — `next build` en Vercel corre chequeo de tipos estricto (`next dev` no lo hace igual de estricto) y encontró un parámetro `cookiesToSet` sin tipo explícito en `lib/supabase/middleware.ts` y `lib/supabase/rsc.ts` (el callback `setAll` de `@supabase/ssr`). Se tipó con `CookieOptions` importado de `@supabase/ssr`. Verificado con `npm run build` local antes de volver a subir.
 - **CI en GitHub Actions** (`.github/workflows/ci.yml`): corre `npm run build` en cada push/PR a `main`, para atrapar errores como el de arriba *antes* de que lleguen a Vercel. No necesita secretos — se comprobó que el build compila sin variables de entorno reales (las rutas dinámicas no ejecutan código server-side en build time). No incluye `next lint` porque el proyecto no tiene ESLint configurado todavía.
 
+### Post-MVP — Autocompletar alimentos (catálogo personal)
+- La tabla `foods` del schema (existía pero no se usaba) ahora se llena sola: cada vez que se guarda un alimento — manual o confirmado desde una foto de IA — `diario/actions.ts` revisa si ya existe uno con ese nombre (propio o del catálogo semilla) y, si no, lo inserta normalizado a valores por 100g (`upsertFoodIfNew`). No pisa un valor existente, para no perder un dato bueno por una estimación de IA menos precisa.
+- **`ManualEntryForm.tsx`** (nuevo componente cliente, reemplaza el form estático de "Agregar manualmente" en el diario): busca en `foods` mientras se escribe el nombre (debounce 250ms, vía el cliente de Supabase del navegador — RLS ya limita a lo propio + semilla), muestra sugerencias con sus kcal/100g, y al elegir una autocompleta gramos (100 por defecto) y macros escaladas. Si después cambian los gramos con un alimento vinculado, las macros se recalculan en vivo; si el usuario edita las macros a mano, se desvincula (los gramos dejan de pisarle lo que escribió).
+- `addMealEntry` cambió de recibir `FormData` a un objeto tipado (mismo patrón que `addMealEntriesFromPhoto`), porque ahora se llama directo desde el cliente en vez de vía `<form action={...}>`. El reset del formulario tras guardar ya no depende del truco `key={entries.length}` (remontar el DOM) — ahora es state de React que se limpia explícitamente tras un guardado exitoso.
+- **Bug encontrado y arreglado de paso**: en modo oscuro, enfocar cualquier input ponía el fondo blanco (`focus:bg-white`) pero el texto seguía blanco (`dark:text-white`) — texto invisible mientras se escribía. Ya estaba resuelto en `login/page.tsx` (`dark:focus:bg-slate-800`) pero no se había llevado al `inputClass` compartido en `lib/utils/styles.ts` cuando se extrajo en la Fase 1. Corregido ahí, así que aplica a todos los formularios del dashboard de una vez.
+- **Probado en el navegador**: se guardó "Mango maduro" (150g/90kcal → 60kcal/100g calculado), y al escribir "man" en una entrada nueva apareció como sugerencia; al seleccionarla autocompletó gramos/calorías/macros, y cambiar los gramos a 300 recalculó correctamente (180kcal/3g/45g/0g).
+
 ## Cómo mandar cambios (flujo normal de trabajo)
 
 Con el repo en GitHub y Vercel conectado, mandar un cambio a producción es:
@@ -105,7 +112,7 @@ Si el build falla (en CI o en Vercel), casi siempre es un error de tipos que `ne
 - Proyecto Supabase separado para producción (hoy dev y producción comparten la misma base de datos).
 
 **Producto**
-- Autocompletar/buscar en alimentos ya registrados (la tabla `foods` del schema existe pero no se usa activamente todavía — cada entrada manual es texto libre).
+- ✅ ~~Autocompletar/buscar en alimentos ya registrados~~ — hecho (ver arriba).
 - Editar una entrada existente en vez de solo poder eliminarla y volver a crearla.
 - Objetivo calórico calculado automáticamente (ej. fórmula Mifflin-St Jeor) a partir de peso/altura/edad/sexo del perfil.
 - Historial de peso a lo largo del tiempo (hoy `profiles.peso_kg` es un único valor actual, no una serie histórica) para poder graficarlo en Reportes.
