@@ -1,0 +1,29 @@
+name: CI
+
+# Corre el mismo build de producción que usa Vercel (incluye chequeo
+# estricto de tipos de TypeScript) antes de que llegue al deploy. No
+# necesita secretos: el build no ejecuta código server-side en build time,
+# solo lo compila y lo tipa.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - run: npm ci
+      - run: npm run build
