@@ -1,8 +1,9 @@
 import { createClient } from "@/lib/supabase/rsc";
-import { addMealEntry, deleteMealEntry } from "./actions";
-import { cardClass, inputClass, primaryButtonClass } from "@/lib/utils/styles";
+import { deleteMealEntry } from "./actions";
+import { cardClass } from "@/lib/utils/styles";
 import { hoyGuatemala } from "@/lib/utils/date";
 import PhotoUploader from "@/components/diario/PhotoUploader";
+import ManualEntryForm from "@/components/diario/ManualEntryForm";
 import type { MealEntry, TipoComida } from "@/types/database";
 
 const TIPOS: { value: TipoComida; label: string }[] = [
@@ -93,71 +94,7 @@ export default async function DiarioPage() {
 
       <section className={cardClass}>
         <h2 className="mb-4 font-medium text-slate-900 dark:text-white">Agregar manualmente</h2>
-        {/* key fuerza a React a remontar el form (y vaciar los inputs) cada vez
-            que la lista cambia, ya que son inputs sin controlar. */}
-        <form
-          key={entries.length}
-          action={addMealEntry}
-          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-        >
-          <input
-            name="nombre"
-            aria-label="Alimento"
-            placeholder="Alimento"
-            required
-            className={`col-span-1 sm:col-span-2 ${inputClass}`}
-          />
-          <select name="tipo_comida" aria-label="Tipo de comida" required className={inputClass}>
-            {TIPOS.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-          <input
-            name="cantidad_gramos"
-            type="number"
-            step="any"
-            aria-label="Cantidad en gramos"
-            placeholder="Gramos"
-            required
-            className={inputClass}
-          />
-          <input
-            name="calorias"
-            type="number"
-            step="any"
-            aria-label="Calorías"
-            placeholder="Calorías"
-            required
-            className={inputClass}
-          />
-          <input
-            name="proteina"
-            type="number"
-            step="any"
-            aria-label="Proteína en gramos"
-            placeholder="Proteína (g)"
-            className={inputClass}
-          />
-          <input
-            name="carbos"
-            type="number"
-            step="any"
-            aria-label="Carbohidratos en gramos"
-            placeholder="Carbos (g)"
-            className={inputClass}
-          />
-          <input
-            name="grasas"
-            type="number"
-            step="any"
-            aria-label="Grasas en gramos"
-            placeholder="Grasas (g)"
-            className={inputClass}
-          />
-          <button className={`col-span-1 sm:col-span-2 ${primaryButtonClass}`}>Guardar</button>
-        </form>
+        <ManualEntryForm />
       </section>
     </div>
   );
