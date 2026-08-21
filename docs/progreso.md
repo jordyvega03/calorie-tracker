@@ -4,7 +4,10 @@
 
 ## Resumen rápido
 
-**Las 5 fases del roadmap (ver `PLAN.md` sección 6) están completas**, probadas en el navegador con datos reales, y funcionando en `http://localhost:3000`. El MVP está funcionalmente terminado — lo que queda es deploy a producción (Vercel) y decisiones de pulido opcional (ver pendientes).
+**Las 5 fases del roadmap (ver `PLAN.md` sección 6) están completas y la app está desplegada en producción (Vercel), con CI en GitHub Actions.** El MVP está terminado y en línea. Lo que queda son mejoras post-MVP (ver sección al final) — nada bloqueante.
+
+- **Repo:** [github.com/jordyvega03/calorie-tracker](https://github.com/jordyvega03/calorie-tracker) (público)
+- **Producción:** desplegada en Vercel (root directory `apps/web`), deploy automático en cada push a `main`
 
 ## Qué está hecho
 
@@ -53,6 +56,32 @@
 - **Verificado**: con la hora real de Guatemala en 20 de agosto ~8pm (cuando en UTC ya era 21 de agosto), el diario y los reportes muestran correctamente "2026-08-20" como hoy.
 - **Trade-off deliberado**: la zona horaria queda fija en el código (`TIMEZONE` en `lib/utils/date.ts`), no es configurable por usuario. Correcto mientras la app sea de un solo usuario/región (Guatemala); si en el futuro hay usuarios en otras zonas horarias, esto tendría que volverse un campo del perfil.
 
+### Post-MVP — GitHub, Vercel y CI
+- **Repo en GitHub**: `git init` + primer commit + push a `github.com/jordyvega03/calorie-tracker` (público). Remote configurado por SSH con un host alias personal (`git@github-personal:...`, ver `~/.ssh/config`) — `git push`/`git pull` no piden credenciales.
+- **Deploy en Vercel**: proyecto importado desde GitHub, **Root Directory = `apps/web`** (el repo es un monorepo), variables de entorno cargadas a mano en el dashboard de Vercel (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `GEMINI_API_KEY` — mismos valores que `.env.local`; `SUPABASE_SERVICE_ROLE_KEY` no hace falta). Deploy automático en cada push a `main`.
+- **Fix de build de producción**: el primer deploy falló — `next build` en Vercel corre chequeo de tipos estricto (`next dev` no lo hace igual de estricto) y encontró un parámetro `cookiesToSet` sin tipo explícito en `lib/supabase/middleware.ts` y `lib/supabase/rsc.ts` (el callback `setAll` de `@supabase/ssr`). Se tipó con `CookieOptions` importado de `@supabase/ssr`. Verificado con `npm run build` local antes de volver a subir.
+- **CI en GitHub Actions** (`.github/workflows/ci.yml`): corre `npm run build` en cada push/PR a `main`, para atrapar errores como el de arriba *antes* de que lleguen a Vercel. No necesita secretos — se comprobó que el build compila sin variables de entorno reales (las rutas dinámicas no ejecutan código server-side en build time). No incluye `next lint` porque el proyecto no tiene ESLint configurado todavía.
+
+## Cómo mandar cambios (flujo normal de trabajo)
+
+Con el repo en GitHub y Vercel conectado, mandar un cambio a producción es:
+
+```bash
+cd /Users/jordy/Documents/personal/calorie-tracker
+git add -A
+git status              # revisar qué se va a subir antes de commitear
+git commit -m "Descripción corta del cambio"
+git push
+```
+
+Qué pasa automáticamente después del `push` a `main`:
+1. **GitHub Actions** corre `npm run build` (`.github/workflows/ci.yml`). Se revisa en la pestaña **Actions** del repo, o con el badge `https://github.com/jordyvega03/calorie-tracker/actions/workflows/ci.yml/badge.svg`.
+2. **Vercel** dispara un deploy nuevo automáticamente. Se revisa en el dashboard de Vercel.
+
+Si el build falla (en CI o en Vercel), casi siempre es un error de tipos que `next dev` no mostró — correr `npm run build` en local (`cd apps/web && npm run build`) reproduce el mismo chequeo antes de volver a subir.
+
+**No hace falta re-explicar el contexto del proyecto en una sesión nueva de Claude**: basta con pedir que lea este archivo (`docs/progreso.md`), `PLAN.md` y `docs/decisiones-tecnicas.md`.
+
 ## Decisiones tomadas que no estaban en el `PLAN.md` original
 
 - Las rutas de análisis de imagen **no necesitan `SUPABASE_SERVICE_ROLE_KEY`** (se dejó vacía a propósito en `.env.local`, con comentario explicando por qué). Si en el futuro se necesita una tarea admin real (ej. borrar datos de un usuario eliminado), ahí sí se usaría `lib/supabase/server.ts`.
@@ -68,22 +97,33 @@
 | `SUPABASE_SERVICE_ROLE_KEY` | vacía a propósito (no se usa por ahora) |
 | `GEMINI_API_KEY` | ✅ configurada, tier gratis (sin tarjeta vinculada) |
 
-## Pendientes / deuda técnica menor (no bloquean nada, pero quedan anotados)
+## Mejoras post-MVP sugeridas (nada de esto bloquea nada, es la lista para elegir qué sigue)
 
-- No hay rate limiting en `/api/analyze-*` (aceptable para 1 usuario; si el proyecto crece a varios usuarios, conviene agregar un límite básico por usuario/día).
-- `types/database.ts` tiene tipos escritos a mano; sería mejor generarlos con `supabase gen types typescript` cuando el schema se estabilice más.
-- El ícono de PWA es un placeholder simple generado por script (círculo blanco sobre emerald) — funcional y con buen padding para maskable, pero no es un diseño de marca trabajado; si en algún momento se quiere un ícono "de verdad" (logo, tipografía), reemplazar `public/icons/icon-192.png` y `icon-512.png`.
-- El offline básico solo cachea páginas ya visitadas con conexión — si un usuario nunca abrió `/reportes` con internet, no va a estar disponible sin conexión la primera vez. Es el comportamiento esperado de un service worker simple (no hay pre-cache de todo el sitio a propósito, para no gastar cuota de cache innecesariamente).
+**Infraestructura**
+- ✅ ~~CI en GitHub Actions~~ — hecho (ver arriba).
+- Generar `types/database.ts` con `supabase gen types typescript` en vez de mantenerlo a mano.
+- Proyecto Supabase separado para producción (hoy dev y producción comparten la misma base de datos).
 
-## Próximos pasos sugeridos (todas las fases del plan original están completas)
+**Producto**
+- Autocompletar/buscar en alimentos ya registrados (la tabla `foods` del schema existe pero no se usa activamente todavía — cada entrada manual es texto libre).
+- Editar una entrada existente en vez de solo poder eliminarla y volver a crearla.
+- Objetivo calórico calculado automáticamente (ej. fórmula Mifflin-St Jeor) a partir de peso/altura/edad/sexo del perfil.
+- Historial de peso a lo largo del tiempo (hoy `profiles.peso_kg` es un único valor actual, no una serie histórica) para poder graficarlo en Reportes.
+- Metas de macros (proteína/carbos/grasas), no solo calorías — el dato ya se guarda por entrada, falta mostrarlo contra un objetivo.
+- Exportar datos a CSV.
 
-- **Deploy a Vercel**: conectar el repo (hay que inicializar git — el proyecto no es un repositorio todavía), configurar las mismas variables de entorno de `.env.local` como env vars de Vercel, y hacer el primer deploy. Después de eso, actualizar `NEXT_PUBLIC_SUPABASE_URL`/keys si se crea un proyecto Supabase separado para producción (hoy todo apunta al mismo proyecto que se usa en desarrollo).
+**Seguridad**
+- Rate limiting en `/api/analyze-*` (aceptable para 1 usuario; importante si el proyecto crece a varios usuarios, para controlar costo/abuso de Gemini).
 - **Reactivar "Confirm email"** en Supabase Auth antes de compartir la app con otros usuarios (hoy cualquiera puede crear cuenta sin verificar el correo).
+
+**Otros**
 - Si algún día hay usuarios fuera de Guatemala, la zona horaria fija en `lib/utils/date.ts` tendría que volverse configurable por perfil.
-- Historial de peso a lo largo del tiempo (hoy `profiles.peso_kg` es un único valor actual, no una serie histórica) si se quiere esa gráfica que mencionaba el `PLAN.md` original.
+- El ícono de PWA es un placeholder simple generado por script (círculo blanco sobre emerald) — reemplazar `public/icons/icon-192.png`/`icon-512.png` si se quiere un diseño de marca real.
+- El offline básico solo cachea páginas ya visitadas con conexión (comportamiento esperado de un service worker simple, no pre-cachea todo el sitio a propósito).
 
 ## Cómo retomar
 
 1. `cd apps/web && npm run dev` (variables de entorno ya están en `.env.local`).
 2. Login con `jordyvega15@gmail.com` / `prueba123`, o crear cuenta nueva (email confirm sigue desactivado).
 3. Leer esta guía + `PLAN.md` (arquitectura general) + `docs/decisiones-tecnicas.md` (por qué de cada decisión).
+4. Para mandar cambios a producción, ver "Cómo mandar cambios" más arriba — resumen: `git add -A && git commit -m "..." && git push`, y CI + Vercel se encargan del resto.
