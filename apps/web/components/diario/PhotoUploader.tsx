@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/utils/image";
 import { addMealEntriesFromPhoto } from "@/app/(dashboard)/diario/actions";
@@ -43,17 +43,40 @@ export default function PhotoUploader() {
   const [modo, setModo] = useState<Modo>("plato");
   const [tipoComida, setTipoComida] = useState<TipoComida>("desayuno");
   const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<Item[] | null>(null);
   const [fotoUrl, setFotoUrl] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
+  const inputCamaraRef = useRef<HTMLInputElement>(null);
+  const inputGaleriaRef = useRef<HTMLInputElement>(null);
+
+  // object URL de la vista previa: se crea al elegir foto y se libera al
+  // cambiarla/cerrarla, para no ir acumulando memoria.
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  function elegirArchivo(f: File | null) {
+    setFile(f);
+    setError(null);
+  }
+
   function reset() {
     setFile(null);
     setItems(null);
     setError(null);
     setFotoUrl(null);
+    if (inputCamaraRef.current) inputCamaraRef.current.value = "";
+    if (inputGaleriaRef.current) inputGaleriaRef.current.value = "";
   }
 
   async function analizar() {
@@ -232,14 +255,72 @@ export default function PhotoUploader() {
             ))}
           </select>
 
+          {/* Dos inputs ocultos separados: uno fuerza la cámara (capture),
+              el otro abre la galería (sin capture). Confiar en un solo
+              input con `capture` es inconsistente entre navegadores/SO —
+              Android suele saltar directo a cámara e ignorar la galería. */}
           <input
+            ref={inputCamaraRef}
             type="file"
             accept="image/*"
             capture="environment"
-            aria-label={modo === "plato" ? "Foto del plato" : "Foto de la etiqueta nutricional"}
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="w-full text-sm text-slate-500 file:mr-4 file:rounded-xl file:border-0 file:bg-stone-100 file:px-4 file:py-2 file:text-sm file:font-medium file:text-slate-700 file:transition-all file:duration-300 hover:file:bg-stone-200 dark:text-slate-400 dark:file:bg-slate-800 dark:file:text-slate-200"
+            className="hidden"
+            onChange={(e) => elegirArchivo(e.target.files?.[0] ?? null)}
           />
+          <input
+            ref={inputGaleriaRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => elegirArchivo(e.target.files?.[0] ?? null)}
+          />
+
+          {!file && (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => inputCamaraRef.current?.click()}
+                aria-label={`Tomar foto ${modo === "plato" ? "del plato" : "de la etiqueta"}`}
+                className="flex flex-col items-center gap-2 rounded-xl border border-stone-300 bg-stone-50 py-6 text-sm font-medium text-slate-700 transition-all duration-300 hover:border-emerald-500 hover:bg-emerald-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-emerald-500 dark:hover:bg-emerald-950/30"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-6 w-6">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 0 1 2-2h1.5l1-1.5h9l1 1.5H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z" />
+                  <circle cx="12" cy="13.5" r="3.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Tomar foto
+              </button>
+              <button
+                type="button"
+                onClick={() => inputGaleriaRef.current?.click()}
+                aria-label={`Elegir de la galería una foto ${modo === "plato" ? "del plato" : "de la etiqueta"}`}
+                className="flex flex-col items-center gap-2 rounded-xl border border-stone-300 bg-stone-50 py-6 text-sm font-medium text-slate-700 transition-all duration-300 hover:border-emerald-500 hover:bg-emerald-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-emerald-500 dark:hover:bg-emerald-950/30"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-6 w-6">
+                  <rect x="3" y="4" width="18" height="16" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m3 16 5-5 4 4 3-3 6 6" />
+                  <circle cx="8" cy="9" r="1.5" />
+                </svg>
+                Elegir de galería
+              </button>
+            </div>
+          )}
+
+          {file && previewUrl && (
+            <div className="relative overflow-hidden rounded-xl border border-stone-200 dark:border-slate-700">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={previewUrl} alt="Vista previa" className="h-56 w-full object-cover" />
+              <button
+                type="button"
+                onClick={() => elegirArchivo(null)}
+                aria-label="Quitar foto"
+                className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white transition-all duration-300 hover:bg-black/80"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
+            </div>
+          )}
 
           {error && (
             <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
