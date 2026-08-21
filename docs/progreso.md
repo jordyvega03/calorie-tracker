@@ -69,6 +69,11 @@
 - **Bug encontrado y arreglado de paso**: en modo oscuro, enfocar cualquier input ponía el fondo blanco (`focus:bg-white`) pero el texto seguía blanco (`dark:text-white`) — texto invisible mientras se escribía. Ya estaba resuelto en `login/page.tsx` (`dark:focus:bg-slate-800`) pero no se había llevado al `inputClass` compartido en `lib/utils/styles.ts` cuando se extrajo en la Fase 1. Corregido ahí, así que aplica a todos los formularios del dashboard de una vez.
 - **Probado en el navegador**: se guardó "Mango maduro" (150g/90kcal → 60kcal/100g calculado), y al escribir "man" en una entrada nueva apareció como sugerencia; al seleccionarla autocompletó gramos/calorías/macros, y cambiar los gramos a 300 recalculó correctamente (180kcal/3g/45g/0g).
 
+### Post-MVP — Captura de foto mejorada (cámara / galería)
+- `PhotoUploader.tsx`: el input único `<input type="file" capture="environment">` se reemplazó por **dos botones explícitos** ("Tomar foto" / "Elegir de galería"), cada uno con su propio `<input type="file">` oculto (uno con `capture="environment"`, el otro sin `capture`). Motivo: un solo input con `capture` es inconsistente entre navegadores — en Android suele abrir la cámara directo e ignorar la opción de galería, dejando al usuario sin poder subir una foto ya tomada.
+- Se agregó **vista previa** de la foto elegida (con `URL.createObjectURL`, liberado con `URL.revokeObjectURL` al cambiar/cerrar) antes de analizarla, con botón para quitarla y elegir otra.
+- **Probado en el navegador**: subida por "Elegir de galería" muestra la vista previa correctamente, el botón "Analizar foto" se habilita, y "quitar foto" regresa a los dos botones limpio (el input se resetea).
+
 ## Cómo mandar cambios (flujo normal de trabajo)
 
 Con el repo en GitHub y Vercel conectado, mandar un cambio a producción es:
