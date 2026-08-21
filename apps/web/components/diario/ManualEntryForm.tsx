@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { addMealEntry } from "@/app/(dashboard)/diario/actions";
+import { addMealEntry, buscarAlimentoExterno } from "@/app/(dashboard)/diario/actions";
 import { inputClass, primaryButtonClass } from "@/lib/utils/styles";
 import type { TipoComida } from "@/types/database";
 
@@ -13,14 +13,19 @@ const TIPOS: { value: TipoComida; label: string }[] = [
   { value: "snack", label: "Snack" },
 ];
 
-type Sugerencia = {
-  id: string;
+// Forma mínima compartida entre una sugerencia del catálogo local y un
+// resultado de la búsqueda externa (IA) — ambos sirven para autocompletar.
+type NutricionPor100g = {
   nombre: string;
-  marca: string | null;
   calorias_100g: number;
   proteina_100g: number | null;
   carbos_100g: number | null;
   grasas_100g: number | null;
+};
+
+type Sugerencia = NutricionPor100g & {
+  id: string;
+  marca: string | null;
 };
 
 const VACIO = {
@@ -37,8 +42,10 @@ export default function ManualEntryForm() {
   const [form, setForm] = useState(VACIO);
   const [sugerencias, setSugerencias] = useState<Sugerencia[]>([]);
   const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
-  const [alimentoSeleccionado, setAlimentoSeleccionado] = useState<Sugerencia | null>(null);
+  const [alimentoSeleccionado, setAlimentoSeleccionado] = useState<NutricionPor100g | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [buscandoExterno, setBuscandoExterno] = useState(false);
+  const [busquedaExternaFallo, setBusquedaExternaFallo] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const contenedorRef = useRef<HTMLDivElement>(null);
 
@@ -75,7 +82,7 @@ export default function ManualEntryForm() {
     return () => document.removeEventListener("mousedown", onClickFuera);
   }, []);
 
-  function recalcularDesde(alimento: Sugerencia, gramosStr: string) {
+  function recalcularDesde(alimento: NutricionPor100g, gramosStr: string) {
     const gramos = Number(gramosStr) || 100;
     const factor = gramos / 100;
     setForm((f) => ({
@@ -95,12 +102,40 @@ export default function ManualEntryForm() {
     setMostrarSugerencias(false);
   }
 
+  // Cuando no hay nada en el catálogo local, le pregunta a Gemini (solo
+  // texto) los valores por 100g. No se guarda en `foods` todavía — eso pasa
+  // solo si el usuario confirma y guarda la entrada (mismo criterio que el
+  // resto de la app: la IA nunca persiste nada sin pasar por el usuario).
+  async function buscarConIA() {
+    const query = form.nombre.trim();
+    if (query.length < 2) return;
+
+    setBuscandoExterno(true);
+    setBusquedaExternaFallo(false);
+    try {
+      const resultado = await buscarAlimentoExterno(query);
+      if (!resultado) {
+        setBusquedaExternaFallo(true);
+        return;
+      }
+      setAlimentoSeleccionado(resultado);
+      setForm((f) => ({ ...f, nombre: resultado.nombre }));
+      recalcularDesde(resultado, form.cantidadGramos || "100");
+      setMostrarSugerencias(false);
+    } catch {
+      setBusquedaExternaFallo(true);
+    } finally {
+      setBuscandoExterno(false);
+    }
+  }
+
   function actualizar(campo: keyof typeof VACIO, valor: string) {
     setForm((f) => ({ ...f, [campo]: valor }));
 
     if (campo === "nombre") {
       setAlimentoSeleccionado(null);
       setMostrarSugerencias(true);
+      setBusquedaExternaFallo(false);
     }
 
     // Si hay un alimento vinculado y cambian los gramos, recalcular macros
@@ -131,6 +166,7 @@ export default function ManualEntryForm() {
       });
       setForm(VACIO);
       setAlimentoSeleccionado(null);
+      setBusquedaExternaFallo(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error guardando");
     } finally {
@@ -151,7 +187,7 @@ export default function ManualEntryForm() {
           required
           className={inputClass + " w-full"}
         />
-        {mostrarSugerencias && sugerencias.length > 0 && (
+        {mostrarSugerencias && form.nombre.trim().length >= 2 && (
           <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-stone-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
             {sugerencias.map((s) => (
               <li key={s.id}>
@@ -170,6 +206,61 @@ export default function ManualEntryForm() {
                 </button>
               </li>
             ))}
+
+            {sugerencias.length === 0 && (
+              <li>
+                {buscandoExterno ? (
+                  <div className="flex items-center gap-2 px-4 py-3 text-sm text-slate-400">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      className="h-4 w-4 shrink-0 animate-spin"
+                    >
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="9"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeOpacity="0.25"
+                      />
+                      <path
+                        d="M21 12a9 9 0 0 0-9-9"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    Buscando &quot;{form.nombre.trim()}&quot; con IA...
+                  </div>
+                ) : busquedaExternaFallo ? (
+                  <div className="px-4 py-3 text-sm text-slate-400">
+                    No encontré &quot;{form.nombre.trim()}&quot;. Completa los datos a mano.
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={buscarConIA}
+                    className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium text-emerald-700 transition-all duration-300 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={1.8}
+                      className="h-4 w-4 shrink-0"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.1 2.1M15.6 15.6l2.1 2.1M6.3 17.7l2.1-2.1M15.6 8.4l2.1-2.1"
+                      />
+                    </svg>
+                    Buscar &quot;{form.nombre.trim()}&quot; con IA
+                  </button>
+                )}
+              </li>
+            )}
           </ul>
         )}
       </div>

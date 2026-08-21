@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/rsc";
 import { hoyGuatemala, horaActualGuatemala } from "@/lib/utils/date";
+import { estimateFoodNutrition } from "@/lib/ai/gemini";
 import type { OrigenRegistro, TipoComida } from "@/types/database";
 
 type ItemDetectado = {
@@ -147,6 +148,34 @@ export async function addMealEntriesFromPhoto(input: {
   }
 
   revalidatePath("/diario");
+}
+
+// Se llama cuando el usuario escribe un alimento en "Agregar manualmente"
+// que no está en su catálogo local (tabla `foods`). Le pregunta a Gemini
+// (solo texto, sin imagen) valores nutricionales de referencia por 100g.
+// No guarda nada en `foods` todavía — eso pasa cuando el usuario confirma
+// y guarda la entrada (mismo mecanismo que el resto de la app: nada de IA
+// se persiste sin que el usuario lo revise primero).
+export async function buscarAlimentoExterno(nombre: string) {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const query = nombre.trim();
+  if (query.length < 2) return null;
+
+  const resultado = await estimateFoodNutrition(query);
+  if (!resultado.encontrado) return null;
+
+  return {
+    nombre: resultado.nombre_normalizado || query,
+    calorias_100g: resultado.calorias_100g,
+    proteina_100g: resultado.proteina_100g,
+    carbos_100g: resultado.carbos_100g,
+    grasas_100g: resultado.grasas_100g,
+  };
 }
 
 export async function deleteMealEntry(id: string) {
