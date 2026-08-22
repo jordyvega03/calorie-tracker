@@ -11,7 +11,6 @@ function aNumero(valor: string) {
 
 export default function MealEntryItem({ entry }: { entry: MealEntry }) {
   const [editando, setEditando] = useState(false);
-  const [nombre, setNombre] = useState(entry.nombre_libre ?? "");
   const [gramos, setGramos] = useState(String(entry.cantidad_gramos));
   const [calorias, setCalorias] = useState(String(entry.calorias));
   const [proteina, setProteina] = useState(String(entry.proteina ?? 0));
@@ -43,7 +42,6 @@ export default function MealEntryItem({ entry }: { entry: MealEntry }) {
   function cancelar() {
     setEditando(false);
     setError(null);
-    setNombre(entry.nombre_libre ?? "");
     setGramos(String(entry.cantidad_gramos));
     setCalorias(String(entry.calorias));
     setProteina(String(entry.proteina ?? 0));
@@ -56,7 +54,7 @@ export default function MealEntryItem({ entry }: { entry: MealEntry }) {
     setError(null);
     try {
       await updateMealEntry(entry.id, {
-        nombre,
+        nombre: entry.nombre_libre ?? "",
         cantidadGramos: aNumero(gramos),
         calorias: aNumero(calorias),
         proteina: aNumero(proteina),
@@ -105,61 +103,44 @@ export default function MealEntryItem({ entry }: { entry: MealEntry }) {
   }
 
   return (
-    <li className="space-y-2 rounded-xl border border-emerald-200 bg-stone-50 p-3 dark:border-emerald-900/50 dark:bg-slate-800/60">
-      <input
-        value={nombre}
-        onChange={(e) => setNombre(e.target.value)}
-        placeholder="Alimento"
-        aria-label="Alimento"
-        className={`w-full ${inputClass}`}
-      />
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+    <li className="space-y-3 rounded-xl border border-emerald-200 bg-stone-50 p-3 dark:border-emerald-900/50 dark:bg-slate-800/60">
+      <p className="font-medium leading-relaxed text-slate-900 dark:text-white">
+        {entry.nombre_libre}
+      </p>
+
+      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">
+        Cantidad (gramos)
         <input
           type="number"
           step="any"
           value={gramos}
           onChange={(e) => cambiarGramos(e.target.value)}
-          placeholder="Gramos"
           aria-label="Cantidad en gramos"
-          className={inputClass}
+          className={`mt-1 w-full ${inputClass}`}
         />
-        <input
-          type="number"
-          step="any"
-          value={calorias}
-          onChange={(e) => setCalorias(e.target.value)}
-          placeholder="Calorías"
-          aria-label="Calorías"
-          className={inputClass}
-        />
-        <input
-          type="number"
-          step="any"
-          value={proteina}
-          onChange={(e) => setProteina(e.target.value)}
-          placeholder="Proteína (g)"
-          aria-label="Proteína en gramos"
-          className={inputClass}
-        />
-        <input
-          type="number"
-          step="any"
-          value={carbos}
-          onChange={(e) => setCarbos(e.target.value)}
-          placeholder="Carbos (g)"
-          aria-label="Carbohidratos en gramos"
-          className={inputClass}
-        />
-        <input
-          type="number"
-          step="any"
-          value={grasas}
-          onChange={(e) => setGrasas(e.target.value)}
-          placeholder="Grasas (g)"
-          aria-label="Grasas en gramos"
-          className={inputClass}
-        />
+      </label>
+
+      <div className="grid grid-cols-4 gap-2 text-center">
+        <div className="rounded-xl bg-white px-2 py-1.5 dark:bg-slate-900">
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">{calorias}</p>
+          <p className="text-[11px] text-slate-400">kcal</p>
+        </div>
+        <div className="rounded-xl bg-white px-2 py-1.5 dark:bg-slate-900">
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">{proteina}g</p>
+          <p className="text-[11px] text-slate-400">proteína</p>
+        </div>
+        <div className="rounded-xl bg-white px-2 py-1.5 dark:bg-slate-900">
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">{carbos}g</p>
+          <p className="text-[11px] text-slate-400">carbos</p>
+        </div>
+        <div className="rounded-xl bg-white px-2 py-1.5 dark:bg-slate-900">
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">{grasas}g</p>
+          <p className="text-[11px] text-slate-400">grasas</p>
+        </div>
       </div>
+      <p className="text-[11px] text-slate-400">
+        Las calorías y macros se calculan solos según la cantidad.
+      </p>
 
       {error && (
         <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
