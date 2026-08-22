@@ -208,6 +208,34 @@ export async function analizarDescripcionComida(descripcion: string) {
   );
 }
 
+export async function updateMealEntry(
+  id: string,
+  input: {
+    nombre: string;
+    cantidadGramos: number;
+    calorias: number;
+    proteina: number;
+    carbos: number;
+    grasas: number;
+  }
+) {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("meal_entries")
+    .update({
+      nombre_libre: input.nombre,
+      cantidad_gramos: input.cantidadGramos,
+      calorias: input.calorias,
+      proteina: input.proteina,
+      carbos: input.carbos,
+      grasas: input.grasas,
+    })
+    .eq("id", id);
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/diario");
+}
+
 export async function deleteMealEntry(id: string) {
   const supabase = createClient();
   const { error } = await supabase.from("meal_entries").delete().eq("id", id);

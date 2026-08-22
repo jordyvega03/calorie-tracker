@@ -1,9 +1,9 @@
 import { createClient } from "@/lib/supabase/rsc";
-import { deleteMealEntry } from "./actions";
 import { cardClass } from "@/lib/utils/styles";
 import { hoyGuatemala, semanaActualGuatemala } from "@/lib/utils/date";
 import AgregarComida from "@/components/diario/AgregarComida";
 import SemanaTira from "@/components/diario/SemanaTira";
+import MealEntryItem from "@/components/diario/MealEntryItem";
 import type { MealEntry, TipoComida } from "@/types/database";
 
 const TIPOS: { value: TipoComida; label: string }[] = [
@@ -82,26 +82,23 @@ export default async function DiarioPage({
                   </span>
                 </div>
                 <ul className="space-y-2">
-                  {items.map((e) => (
-                    <li
-                      key={e.id}
-                      className="flex items-center justify-between gap-3 rounded-xl bg-stone-50 px-3 py-2 text-sm transition-all duration-300 hover:bg-stone-100 dark:bg-slate-800/60 dark:hover:bg-slate-800"
-                    >
-                      <span className="leading-relaxed text-slate-700 dark:text-slate-300">
-                        {e.nombre_libre}{" "}
-                        <span className="text-slate-400">
-                          — {e.cantidad_gramos}g — {e.calorias} kcal
+                  {items.map((e) =>
+                    esHoy ? (
+                      <MealEntryItem key={e.id} entry={e} />
+                    ) : (
+                      <li
+                        key={e.id}
+                        className="rounded-xl bg-stone-50 px-3 py-2 text-sm dark:bg-slate-800/60"
+                      >
+                        <span className="leading-relaxed text-slate-700 dark:text-slate-300">
+                          {e.nombre_libre}{" "}
+                          <span className="text-slate-400">
+                            — {e.cantidad_gramos}g — {e.calorias} kcal
+                          </span>
                         </span>
-                      </span>
-                      {esHoy && (
-                        <form action={deleteMealEntry.bind(null, e.id)}>
-                          <button className="shrink-0 text-xs font-medium text-red-500 transition-all duration-300 hover:text-red-600">
-                            Eliminar
-                          </button>
-                        </form>
-                      )}
-                    </li>
-                  ))}
+                      </li>
+                    )
+                  )}
                 </ul>
               </section>
             );
