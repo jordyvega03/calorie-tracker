@@ -100,6 +100,23 @@
 - **Validado el prompt directo contra la API de Gemini** con el ejemplo exacto del usuario (sin poder usar el navegador esta vez — ver nota abajo): segmentó correctamente en 4 alimentos — huevo revuelto 100g/154kcal, frijoles negros cocidos 120g/114kcal, queso fresco 15g/45kcal, café negro 240g/2kcal (total 315kcal) — con conversión razonable de medidas caseras a gramos.
 - **Pendiente de confirmar en el navegador**: la extensión de Chrome se desconectó a mitad de esta sesión y no se pudo recuperar ni con reinicio de Chrome — no se alcanzó a probar visualmente el selector Foto/Describir, el guardado con `texto_ia`, ni el override desde catálogo local dentro de la propia app (aunque el build compila limpio y la lógica de Gemini se validó por separado). Si algo se ve raro al usarlo, es el primer lugar a revisar.
 
+### Bug reportado — "An error occurred in the Server Components render" al usar "Agregar alimento" (sin resolver aún)
+El usuario reportó este error genérico de Next.js en producción justo después de la feature de arriba, usando "Agregar alimento" (no se pudo precisar si foto o texto). Next.js oculta el mensaje real en producción (solo un `digest`), así que se investigó sin navegador (seguía desconectado) con estos pasos, **todos exitosos, sin reproducir el error**:
+1. Insert directo en `meal_entries` con `origen: 'texto_ia'` → OK (la migración sí aplicó).
+2. Insert directo en `foods` con `fuente: 'ia_texto'` → OK.
+3. Réplica completa de `analizarDescripcionComida` (llamada real a Gemini con el ejemplo del usuario + búsqueda `ilike` en `foods`) fuera de Next.js → sin errores, "Queso fresco" se resolvió correctamente contra el catálogo local.
+4. Réplica completa de `addMealEntriesDesdeIA` (insert de 4 filas + `upsertFoodIfNew` por cada una) → sin errores.
+5. **Truco para probar páginas autenticadas sin el navegador**: se puede armar la cookie de sesión de `@supabase/ssr` a mano — iniciar sesión con `supabase-js` (`signInWithPassword`), tomar `data.session`, y mandarla como cookie `sb-liltfoeuabvdwapwjezx-auth-token` con valor `"base64-" + Buffer.from(JSON.stringify(session)).toString('base64url')` en un `curl --cookie`. Sirve contra un `npm run build && npm run start` local. Con esto, recargar `/diario` (incluso con las filas de prueba ya insertadas) devolvió 200 sin ningún rastro de error.
+6. Se limpiaron las filas de prueba en `meal_entries` (no en `foods`, esas quedaron como catálogo real: "Huevos revueltos", "Frijoles negros cocidos", "Café negro").
+
+**Conclusión**: el backend (Gemini, Supabase, RLS, migraciones, el render de `/diario` con datos reales) está descartado — todo funciona limpio por fuera de la app. El error solo puede estar en la interacción real navegador → Server Action (algo que no se puede replicar por curl, ya que requiere el protocolo `Next-Action` real del bundle del cliente) o en el render del Client Component en un caso puntual no cubierto por la revisión de código. **Siguiente paso al retomar**: reproducir con `npm run dev` (local, sin ocultar errores) y capturar el mensaje/stack trace completo que sí se muestra en modo desarrollo — eso da el diagnóstico exacto de inmediato.
+
+### Post-MVP — Editar alimentos del diario (en vez de solo eliminar)
+- **`updateMealEntry`** (Server Action nueva en `diario/actions.ts`): actualiza nombre/gramos/calorías/macros de una entrada existente ya guardada.
+- **`MealEntryItem.tsx`** (nuevo componente): cada alimento del diario es clickeable — dice **"Editar"**, no "Eliminar", en la vista normal. Al hacer clic se expande a un detalle con los campos editables; cambiar los gramos **recalcula en vivo** calorías/proteína/carbos/grasas usando la densidad nutricional del registro original (kcal por gramo, etc., calculada desde los valores ya guardados, no desde el catálogo). "Eliminar alimento" quedó **dentro** del detalle (ya no es un botón de un clic en la lista principal, para evitar borrados accidentales).
+- Esto **solo aplica viendo el día de hoy** — un día pasado sigue mostrando la lista plana sin interacción (ver la decisión de "solo lectura" de la Fase de tira semanal).
+- **Verificado sirviendo `/diario` con sesión real** (mismo truco de cookie de arriba, sin navegador todavía): las 5 entradas reales de hoy mostraron "Editar", cero apariciones de "Eliminar" en el HTML inicial, sin errores de render.
+
 ## Cómo mandar cambios (flujo normal de trabajo)
 
 Con el repo en GitHub y Vercel conectado, mandar un cambio a producción es:
