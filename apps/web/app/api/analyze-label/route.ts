@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createRouteClient } from "@/lib/supabase/route";
 import { analyzeImageWithGemini, PROMPT_ANALIZAR_ETIQUETA } from "@/lib/ai/gemini";
 
+// Margen sobre el timeout de 20s que ya tiene lib/ai/gemini.ts — evita que
+// Vercel corte la función a la fuerza (10s por defecto) antes de que
+// nuestro propio timeout tenga chance de responder con un error legible.
+export const maxDuration = 30;
+
 // Igual que /api/analyze-meal-photo pero para fotos de etiquetas
 // nutricionales (OCR estructurado en vez de estimación visual).
 export async function POST(req: NextRequest) {

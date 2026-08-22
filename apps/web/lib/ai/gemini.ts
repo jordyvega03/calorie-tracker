@@ -8,18 +8,43 @@
 const GEMINI_MODEL = "gemini-flash-latest";
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
+// Vercel corta las funciones serverless a la fuerza si se pasan de su
+// límite de tiempo (10s en el plan Hobby sin configurar maxDuration) —
+// eso se ve del lado del usuario como un error genérico de plataforma,
+// no como el mensaje de error normal de la app. Por eso abortamos la
+// llamada a Gemini nosotros mismos, más rápido que ese límite, para
+// poder mostrar un mensaje entendible ("tardó mucho, intenta de nuevo")
+// en vez de dejar que la plataforma mate la función a medias.
+const GEMINI_TIMEOUT_MS = 20_000;
+
 async function callGemini(parts: Record<string, unknown>[]): Promise<unknown> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY no configurada");
 
-  const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts }],
-      generationConfig: { responseMimeType: "application/json" },
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts }],
+        generationConfig: { responseMimeType: "application/json" },
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(
+        "Gemini está tardando más de lo normal (posible alta demanda). Intenta de nuevo en un momento."
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!res.ok) {
     throw new Error(`Gemini API error: ${res.status} ${await res.text()}`);

@@ -111,6 +111,22 @@ El usuario reportó este error genérico de Next.js en producción justo despué
 
 **Conclusión**: el backend (Gemini, Supabase, RLS, migraciones, el render de `/diario` con datos reales) está descartado — todo funciona limpio por fuera de la app. El error solo puede estar en la interacción real navegador → Server Action (algo que no se puede replicar por curl, ya que requiere el protocolo `Next-Action` real del bundle del cliente) o en el render del Client Component en un caso puntual no cubierto por la revisión de código. **Siguiente paso al retomar**: reproducir con `npm run dev` (local, sin ocultar errores) y capturar el mensaje/stack trace completo que sí se muestra en modo desarrollo — eso da el diagnóstico exacto de inmediato.
 
+### Resolución del bug de arriba — causa real: timeout de Vercel, no un bug de lógica
+Con la extensión de Chrome reconectada, se reprodujo el flujo "Describir" en `npm run dev` (que sí muestra errores completos) con la descripción exacta del usuario. El log del servidor mostró la causa real:
+
+```
+⨯ Error: Gemini API error: 503 { "message": "This model is currently experiencing high demand..." }
+    at callGemini (./lib/ai/gemini.ts:36:15)
+POST /diario 500 in 48898ms
+```
+
+Gemini a veces tarda **hasta 49 segundos** en responder (más aún con un 503 transitorio de por medio) antes de que el propio `try/catch` de la app pueda mostrar un error legible. En Vercel (plan Hobby), las funciones serverless tienen un límite de **10 segundos por defecto** si no se configura `maxDuration` — Vercel mata la función a la fuerza antes de que el `catch` de la app llegue a ejecutarse, y eso es exactamente lo que produce el error genérico "Server Components render" sin detalle. En local (`npm run dev`) no existe ese límite de plataforma, por eso ahí sí se veía el error normal.
+
+**Fix aplicado**:
+- `lib/ai/gemini.ts`: `callGemini` ahora aborta la llamada a Gemini a los **20 segundos** (`AbortController`) y lanza un mensaje amigable ("Gemini está tardando más de lo normal... Intenta de nuevo en un momento.") en vez de dejar que cuelgue.
+- `app/api/analyze-meal-photo/route.ts`, `app/api/analyze-label/route.ts` y `app/(dashboard)/diario/page.tsx`: se añadió `export const maxDuration = 30;` (30s, con margen sobre los 20s del timeout de Gemini) — necesario en la página de `diario` porque las Server Actions invocadas desde ahí (`analizarDescripcionComida`) heredan el límite de duración de la página que las llama, no el de `actions.ts`.
+- **Verificado en el navegador**: tras el fix, se repitió el flujo "Describir" con la misma descripción — Gemini respondió a tiempo (los 503 son intermitentes) y el resultado se interpretó correctamente, incluyendo el override desde catálogo local (los valores de "Huevos revueltos" y "Café" coincidieron exactamente con los ya guardados). El caso de timeout/503 ya se había confirmado antes del fix que cae en el `catch` normal de la app cuando no hay corte de plataforma de por medio; con el `AbortController` a 20s ese mismo `catch` ahora se dispara siempre antes de que Vercel pudiera cortar la función.
+
 ### Post-MVP — Editar alimentos del diario (en vez de solo eliminar)
 - **`updateMealEntry`** (Server Action nueva en `diario/actions.ts`): actualiza nombre/gramos/calorías/macros de una entrada existente ya guardada.
 - **`MealEntryItem.tsx`** (nuevo componente): cada alimento del diario es clickeable — dice **"Editar"**, no "Eliminar", en la vista normal. Al hacer clic se expande a un detalle con los campos editables; cambiar los gramos **recalcula en vivo** calorías/proteína/carbos/grasas usando la densidad nutricional del registro original (kcal por gramo, etc., calculada desde los valores ya guardados, no desde el catálogo). "Eliminar alimento" quedó **dentro** del detalle (ya no es un botón de un clic en la lista principal, para evitar borrados accidentales).

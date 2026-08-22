@@ -15,6 +15,13 @@ const TIPOS: { value: TipoComida; label: string }[] = [
 
 const FECHA_VALIDA = /^\d{4}-\d{2}-\d{2}$/;
 
+// Las Server Actions que se invocan desde esta página (analizarDescripcionComida,
+// que llama a Gemini) usan el límite de duración de ESTA página, no el de
+// diario/actions.ts. Sin esto, Vercel corta la función a los 10s por defecto
+// (plan Hobby) antes de que el timeout propio de lib/ai/gemini.ts (20s) pueda
+// responder con un error legible.
+export const maxDuration = 30;
+
 export default async function DiarioPage({
   searchParams,
 }: {

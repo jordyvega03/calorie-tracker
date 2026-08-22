@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createRouteClient } from "@/lib/supabase/route";
 import { analyzeImageWithGemini, PROMPT_ANALIZAR_PLATO } from "@/lib/ai/gemini";
 
+// Margen sobre el timeout de 20s que ya tiene lib/ai/gemini.ts — evita que
+// Vercel corte la función a la fuerza (10s por defecto) antes de que
+// nuestro propio timeout tenga chance de responder con un error legible.
+export const maxDuration = 30;
+
 // POST { storagePath: string, mimeType: string }
 // El cliente ya subió la foto (comprimida) a Supabase Storage antes de llamar
 // este endpoint. Aquí solo se lee, se manda a Gemini, y se devuelve el
