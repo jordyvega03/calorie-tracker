@@ -1,6 +1,6 @@
 # Estado del proyecto — para retomar en otra sesión
 
-Última actualización: 2026-08-20
+Última actualización: 2026-08-21
 
 ## Resumen rápido
 
@@ -89,6 +89,16 @@
 - `diario/mes/page.tsx` (ruta nueva): calendario del mes con navegación anterior/siguiente (`?mes=YYYY-MM`), grid alineado lunes-primero, cada día con registros muestra su total de kcal, clic en cualquier día navega a `/diario?fecha=...`.
 - **Probado en el navegador**: la tira mostró correctamente lunes 17 a domingo 23 (agosto 2026) con jueves 20 como hoy; clic en miércoles 19 (sin datos) mostró "Nada registrado este día" sin los formularios y con el día correctamente marcado como seleccionado en la tira; "Ver más" abrió el calendario de agosto con el 1 cayendo en sábado (correcto) y el día 20 mostrando su total; clic en un día del calendario regresó al detalle correcto.
 - **Nota de datos, no de código**: durante la prueba se notó que "Desayuno" de hoy incluye alimentos con nombres muy similares a los de "Cena" (ej. "Frijoles negros refritos" vs "Frijoles negros molidos") — son registros reales distintos, probablemente de una foto real analizada en otra sesión sin cambiar el tipo de comida por defecto. No es un bug de la agrupación, se dejó tal cual (son datos del usuario).
+
+### Post-MVP — Describir una comida en texto libre + pantalla de agregar unificada
+- **Nuevo modo "Describir lo que comí"**: el usuario escribe una frase como "2 huevos revueltos con media taza de frijol, 1 cucharada de queso fresco y 1 taza de café" y Gemini la separa en alimentos individuales, convirtiendo medidas caseras (taza, cucharada, unidad) a gramos. `lib/ai/gemini.ts`: `analyzeTextWithGemini` (equivalente en texto a `PROMPT_ANALIZAR_PLATO`, que es para foto).
+- **`analizarDescripcionComida`** (Server Action en `diario/actions.ts`): tras la interpretación de Gemini, para cada alimento identificado busca en el catálogo local (`foods`, `ilike` exacto por nombre — mismo criterio que `upsertFoodIfNew`); si existe, **reemplaza la estimación de Gemini por los valores guardados** (escalados a los gramos que Gemini calculó), y solo deja la estimación de Gemini tal cual para alimentos genuinamente nuevos. Esto es justo lo que se pidió: "si ya tengo un alimento no consulto a Gemini, sino que sea consulta local" — para la nutrición del ítem, no para la interpretación del texto en sí (eso sí necesita IA, no hay forma de parsear lenguaje natural con reglas fijas).
+- **`AgregarComida.tsx`** (nuevo componente, reemplaza a `PhotoUploader.tsx` y `ManualEntryForm.tsx`, ambos borrados): la pantalla de agregar ahora **empieza preguntando "Escaneo por foto" o "Describir lo que comí"**, en vez de mostrar dos bloques siempre visibles (foto + formulario manual). El formulario manual campo-por-campo con autocomplete de un solo alimento queda absorbido por el modo texto (que también consulta el catálogo local) — cubre el mismo caso de uso ("solo aguacate") con menos fricción, y sigue siendo editable antes de guardar igual que el resultado de una foto.
+- `addMealEntriesFromPhoto` se generalizó a **`addMealEntriesDesdeIA`** (cubre `foto_plato`, `foto_etiqueta` y `texto_ia`). `buscarAlimentoExterno` y `estimateFoodNutrition` se eliminaron por quedar sin uso tras borrar `ManualEntryForm`.
+- **Migración `0002_origen_texto_ia.sql`**: agrega `'texto_ia'` a `meal_entries.origen` y `'ia_texto'` a `foods.fuente` (los `CHECK` no lo permitían). **El usuario ya la corrió** en el SQL Editor de Supabase.
+- La lista de alimentos a confirmar ahora muestra el **total de kcal** de lo seleccionado, no solo por ítem.
+- **Validado el prompt directo contra la API de Gemini** con el ejemplo exacto del usuario (sin poder usar el navegador esta vez — ver nota abajo): segmentó correctamente en 4 alimentos — huevo revuelto 100g/154kcal, frijoles negros cocidos 120g/114kcal, queso fresco 15g/45kcal, café negro 240g/2kcal (total 315kcal) — con conversión razonable de medidas caseras a gramos.
+- **Pendiente de confirmar en el navegador**: la extensión de Chrome se desconectó a mitad de esta sesión y no se pudo recuperar ni con reinicio de Chrome — no se alcanzó a probar visualmente el selector Foto/Describir, el guardado con `texto_ia`, ni el override desde catálogo local dentro de la propia app (aunque el build compila limpio y la lógica de Gemini se validó por separado). Si algo se ve raro al usarlo, es el primer lugar a revisar.
 
 ## Cómo mandar cambios (flujo normal de trabajo)
 
