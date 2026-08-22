@@ -2,8 +2,7 @@ import { createClient } from "@/lib/supabase/rsc";
 import { deleteMealEntry } from "./actions";
 import { cardClass } from "@/lib/utils/styles";
 import { hoyGuatemala, semanaActualGuatemala } from "@/lib/utils/date";
-import PhotoUploader from "@/components/diario/PhotoUploader";
-import ManualEntryForm from "@/components/diario/ManualEntryForm";
+import AgregarComida from "@/components/diario/AgregarComida";
 import SemanaTira from "@/components/diario/SemanaTira";
 import type { MealEntry, TipoComida } from "@/types/database";
 
@@ -111,16 +110,9 @@ export default async function DiarioPage({
       )}
 
       {esHoy && (
-        <>
-          <section className={cardClass}>
-            <PhotoUploader />
-          </section>
-
-          <section className={cardClass}>
-            <h2 className="mb-4 font-medium text-slate-900 dark:text-white">Agregar manualmente</h2>
-            <ManualEntryForm />
-          </section>
-        </>
+        <section className={cardClass}>
+          <AgregarComida />
+        </section>
       )}
     </div>
   );

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/rsc";
 import { hoyGuatemala, horaActualGuatemala } from "@/lib/utils/date";
-import { estimateFoodNutrition } from "@/lib/ai/gemini";
+import { analyzeTextWithGemini } from "@/lib/ai/gemini";
 import type { OrigenRegistro, TipoComida } from "@/types/database";
 
 type ItemDetectado = {
@@ -26,7 +26,7 @@ async function upsertFoodIfNew(
   supabase: SupabaseClient,
   userId: string,
   item: ItemDetectado,
-  fuente: "manual" | "ia_foto" | "ia_etiqueta"
+  fuente: "manual" | "ia_foto" | "ia_etiqueta" | "ia_texto"
 ) {
   if (!item.nombre.trim() || item.cantidad_gramos <= 0) return;
 
@@ -100,12 +100,22 @@ export async function addMealEntry(input: {
   revalidatePath("/diario");
 }
 
-// Guarda los alimentos que el usuario confirmó tras revisar/editar el
-// resultado de la IA (foto de plato o foto de etiqueta). Nunca se llama
-// directo desde la respuesta de Gemini sin pasar por la confirmación del usuario.
-export async function addMealEntriesFromPhoto(input: {
+const FUENTE_POR_ORIGEN: Record<
+  Extract<OrigenRegistro, "foto_plato" | "foto_etiqueta" | "texto_ia">,
+  "ia_foto" | "ia_etiqueta" | "ia_texto"
+> = {
+  foto_plato: "ia_foto",
+  foto_etiqueta: "ia_etiqueta",
+  texto_ia: "ia_texto",
+};
+
+// Guarda los alimentos que el usuario confirmó tras revisar/editar un
+// resultado de la IA (foto de plato, foto de etiqueta, o descripción de
+// texto). Nunca se llama directo desde la respuesta de Gemini sin pasar por
+// la confirmación del usuario.
+export async function addMealEntriesDesdeIA(input: {
   tipoComida: TipoComida;
-  origen: Extract<OrigenRegistro, "foto_plato" | "foto_etiqueta">;
+  origen: Extract<OrigenRegistro, "foto_plato" | "foto_etiqueta" | "texto_ia">;
   fotoUrl: string | null;
   items: ItemDetectado[];
 }) {
@@ -139,43 +149,63 @@ export async function addMealEntriesFromPhoto(input: {
   if (error) throw new Error(error.message);
 
   for (const item of input.items) {
-    await upsertFoodIfNew(
-      supabase,
-      user.id,
-      item,
-      input.origen === "foto_plato" ? "ia_foto" : "ia_etiqueta"
-    );
+    await upsertFoodIfNew(supabase, user.id, item, FUENTE_POR_ORIGEN[input.origen]);
   }
 
   revalidatePath("/diario");
 }
 
-// Se llama cuando el usuario escribe un alimento en "Agregar manualmente"
-// que no está en su catálogo local (tabla `foods`). Le pregunta a Gemini
-// (solo texto, sin imagen) valores nutricionales de referencia por 100g.
-// No guarda nada en `foods` todavía — eso pasa cuando el usuario confirma
-// y guarda la entrada (mismo mecanismo que el resto de la app: nada de IA
-// se persiste sin que el usuario lo revise primero).
-export async function buscarAlimentoExterno(nombre: string) {
+// Interpreta una descripción libre de una comida completa ("2 huevos
+// revueltos con media taza de frijol...") con Gemini, y para cada alimento
+// que ya está en el catálogo local (tabla `foods`) reemplaza la estimación
+// de Gemini por los valores guardados — así solo se "gasta" IA en
+// alimentos que de verdad son nuevos, tal como se pidió.
+export async function analizarDescripcionComida(descripcion: string) {
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("No autenticado");
 
-  const query = nombre.trim();
-  if (query.length < 2) return null;
+  const texto = descripcion.trim();
+  if (texto.length < 3) throw new Error("Describe al menos un alimento");
 
-  const resultado = await estimateFoodNutrition(query);
-  if (!resultado.encontrado) return null;
+  const { alimentos } = await analyzeTextWithGemini(texto);
+  if (!alimentos || alimentos.length === 0) {
+    throw new Error("No pude identificar alimentos en esa descripción");
+  }
 
-  return {
-    nombre: resultado.nombre_normalizado || query,
-    calorias_100g: resultado.calorias_100g,
-    proteina_100g: resultado.proteina_100g,
-    carbos_100g: resultado.carbos_100g,
-    grasas_100g: resultado.grasas_100g,
-  };
+  return Promise.all(
+    alimentos.map(async (item) => {
+      const { data: local } = await supabase
+        .from("foods")
+        .select("nombre, calorias_100g, proteina_100g, carbos_100g, grasas_100g")
+        .ilike("nombre", item.nombre.trim())
+        .limit(1)
+        .maybeSingle();
+
+      if (local) {
+        const factor = item.cantidad_gramos / 100;
+        return {
+          nombre: local.nombre,
+          cantidad_gramos: item.cantidad_gramos,
+          calorias: Math.round(local.calorias_100g * factor),
+          proteina: Math.round((local.proteina_100g ?? 0) * factor),
+          carbos: Math.round((local.carbos_100g ?? 0) * factor),
+          grasas: Math.round((local.grasas_100g ?? 0) * factor),
+        };
+      }
+
+      return {
+        nombre: item.nombre,
+        cantidad_gramos: item.cantidad_gramos,
+        calorias: item.calorias,
+        proteina: item.proteina_g,
+        carbos: item.carbos_g,
+        grasas: item.grasas_g,
+      };
+    })
+  );
 }
 
 export async function deleteMealEntry(id: string) {

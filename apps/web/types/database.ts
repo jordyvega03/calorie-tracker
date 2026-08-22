@@ -3,7 +3,7 @@
 //   supabase gen types typescript --project-id <id> > types/database.ts
 
 export type TipoComida = "desayuno" | "almuerzo" | "cena" | "snack";
-export type OrigenRegistro = "manual" | "foto_plato" | "foto_etiqueta";
+export type OrigenRegistro = "manual" | "foto_plato" | "foto_etiqueta" | "texto_ia";
 export type TipoWorkout = "cardio" | "fuerza" | "otro";
 
 export interface Profile {
@@ -25,7 +25,7 @@ export interface Food {
   proteina_100g: number | null;
   carbos_100g: number | null;
   grasas_100g: number | null;
-  fuente: "manual" | "ia_foto" | "ia_etiqueta" | "seed";
+  fuente: "manual" | "ia_foto" | "ia_etiqueta" | "ia_texto" | "seed";
   created_by: string | null;
   created_at: string;
 }

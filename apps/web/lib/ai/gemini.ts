@@ -84,44 +84,54 @@ Responde ÚNICAMENTE con un JSON con esta forma exacta:
 }
 `.trim();
 
-export type EstimacionNutricional = {
-  encontrado: boolean;
-  nombre_normalizado: string;
-  calorias_100g: number;
-  proteina_100g: number;
-  carbos_100g: number;
-  grasas_100g: number;
+
+export type AlimentoDeTexto = {
+  nombre: string;
+  cantidad_gramos: number;
+  calorias: number;
+  proteina_g: number;
+  carbos_g: number;
+  grasas_g: number;
 };
 
-// Estimación por texto (sin imagen) para cuando el usuario escribe un
-// alimento que no está en su catálogo local (tabla `foods`). Pensado para
-// alimentos genéricos/caseros (incluida comida guatemalteca) en vez de
-// productos de marca — para eso ya está "Foto de etiqueta".
-export async function estimateFoodNutrition(nombre: string): Promise<EstimacionNutricional> {
+// Interpreta una descripción libre de una comida completa ("2 huevos
+// revueltos con media taza de frijol, 1 cucharada de queso fresco y 1 taza
+// de café") y la separa en alimentos individuales, convirtiendo medidas
+// caseras a gramos. Es el equivalente en texto de PROMPT_ANALIZAR_PLATO
+// (foto), para cuando el usuario prefiere escribir en vez de tomar una foto.
+export async function analyzeTextWithGemini(
+  descripcion: string
+): Promise<{ alimentos: AlimentoDeTexto[] }> {
   const prompt = `
-Da la información nutricional de referencia por cada 100 gramos del siguiente
-alimento: "${nombre}".
+Un usuario describe en lenguaje natural (español, con medidas caseras
+comunes en Guatemala como taza, cucharada, unidad, rebanada) los alimentos
+de una comida.
 
-Es un alimento genérico, no un producto de marca — usa valores nutricionales
-típicos de tablas de composición de alimentos (ej. USDA, INCAP) para ese
-alimento tal como se come normalmente. Si el nombre describe una preparación
-conocida (ej. "frijoles negros molidos", "tortilla de maíz", "plátano frito"),
-considérala tal cual.
+Descripción: "${descripcion}"
+
+Identifica cada alimento por separado y estima su cantidad en gramos
+(convierte medidas caseras como "media taza", "1 cucharada", "una unidad" a
+gramos usando equivalencias típicas para ese alimento) y su información
+nutricional para esa cantidad.
 
 Responde ÚNICAMENTE con este JSON:
 {
-  "encontrado": boolean,
-  "nombre_normalizado": string,
-  "calorias_100g": number,
-  "proteina_100g": number,
-  "carbos_100g": number,
-  "grasas_100g": number
+  "alimentos": [
+    {
+      "nombre": string,
+      "cantidad_gramos": number,
+      "calorias": number,
+      "proteina_g": number,
+      "carbos_g": number,
+      "grasas_g": number
+    }
+  ]
 }
 
-Si "${nombre}" no es un alimento identificable, responde con "encontrado": false
-y el resto de los campos en 0.
+Si no logras identificar ningún alimento en la descripción, responde
+{ "alimentos": [] }.
 `.trim();
 
   const resultado = await callGemini([{ text: prompt }]);
-  return resultado as EstimacionNutricional;
+  return resultado as { alimentos: AlimentoDeTexto[] };
 }
