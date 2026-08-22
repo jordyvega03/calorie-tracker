@@ -78,6 +78,13 @@ export const PROMPT_ANALIZAR_PLATO = `
 Analiza esta foto de un plato de comida. Identifica cada alimento visible y
 estima su cantidad en gramos y su información nutricional.
 
+Para cada alimento indica también cómo se mide naturalmente al comerlo:
+- "unidad" si se cuenta por piezas discretas (ej. huevo, uva, tortilla,
+  rebanada de pan) — en ese caso incluye "gramos_por_unidad" con el peso
+  promedio de una sola pieza.
+- "gramos" para todo lo demás (ej. arroz, frijoles, carne, ensalada) — en
+  ese caso "gramos_por_unidad" va en null.
+
 Responde ÚNICAMENTE con un JSON con esta forma exacta:
 {
   "alimentos": [
@@ -87,7 +94,9 @@ Responde ÚNICAMENTE con un JSON con esta forma exacta:
       "calorias": number,
       "proteina_g": number,
       "carbos_g": number,
-      "grasas_g": number
+      "grasas_g": number,
+      "unidad_medida": "gramos" | "unidad",
+      "gramos_por_unidad": number | null
     }
   ],
   "confianza": "alta" | "media" | "baja"
@@ -117,6 +126,8 @@ export type AlimentoDeTexto = {
   proteina_g: number;
   carbos_g: number;
   grasas_g: number;
+  unidad_medida: "gramos" | "unidad";
+  gramos_por_unidad: number | null;
 };
 
 // Interpreta una descripción libre de una comida completa ("2 huevos
@@ -139,6 +150,13 @@ Identifica cada alimento por separado y estima su cantidad en gramos
 gramos usando equivalencias típicas para ese alimento) y su información
 nutricional para esa cantidad.
 
+Para cada alimento indica también cómo se mide naturalmente al comerlo:
+- "unidad" si se cuenta por piezas discretas (ej. huevo, uva, tortilla,
+  rebanada de pan) — en ese caso incluye "gramos_por_unidad" con el peso
+  promedio de una sola pieza.
+- "gramos" para todo lo demás (ej. arroz, frijoles, carne, café) — en ese
+  caso "gramos_por_unidad" va en null.
+
 Responde ÚNICAMENTE con este JSON:
 {
   "alimentos": [
@@ -148,7 +166,9 @@ Responde ÚNICAMENTE con este JSON:
       "calorias": number,
       "proteina_g": number,
       "carbos_g": number,
-      "grasas_g": number
+      "grasas_g": number,
+      "unidad_medida": "gramos" | "unidad",
+      "gramos_por_unidad": number | null
     }
   ]
 }

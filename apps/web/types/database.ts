@@ -5,6 +5,7 @@
 export type TipoComida = "desayuno" | "almuerzo" | "cena" | "snack";
 export type OrigenRegistro = "manual" | "foto_plato" | "foto_etiqueta" | "texto_ia";
 export type TipoWorkout = "cardio" | "fuerza" | "otro";
+export type UnidadMedida = "gramos" | "unidad";
 
 export interface Profile {
   id: string;
@@ -26,6 +27,8 @@ export interface Food {
   carbos_100g: number | null;
   grasas_100g: number | null;
   fuente: "manual" | "ia_foto" | "ia_etiqueta" | "ia_texto" | "seed";
+  unidad_medida: UnidadMedida;
+  gramos_por_unidad: number | null;
   created_by: string | null;
   created_at: string;
 }
@@ -41,6 +44,8 @@ export interface MealEntry {
   proteina: number | null;
   carbos: number | null;
   grasas: number | null;
+  unidad_medida: UnidadMedida;
+  gramos_por_unidad: number | null;
   fecha: string;
   hora: string;
   origen: OrigenRegistro;

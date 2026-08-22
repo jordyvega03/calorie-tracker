@@ -133,6 +133,21 @@ Gemini a veces tarda **hasta 49 segundos** en responder (más aún con un 503 tr
 - Esto **solo aplica viendo el día de hoy** — un día pasado sigue mostrando la lista plana sin interacción (ver la decisión de "solo lectura" de la Fase de tira semanal).
 - **Verificado sirviendo `/diario` con sesión real** (mismo truco de cookie de arriba, sin navegador todavía): las 5 entradas reales de hoy mostraron "Editar", cero apariciones de "Eliminar" en el HTML inicial, sin errores de render.
 
+### Post-MVP — Solo la cantidad es editable en el detalle de un alimento
+El usuario pidió que al editar un alimento del diario **solo se pueda cambiar la cantidad**; calorías y macros ya no son campos de texto libres, siempre se calculan solos.
+- `MealEntryItem.tsx`: el nombre pasó a ser texto fijo (no input) y calorías/proteína/carbos/grasas se muestran como tarjetas de solo lectura, no `<input>`. El único campo editable es la cantidad; al cambiarla, los demás valores se recalculan con la densidad nutricional del registro original (igual que antes, solo que ahora el usuario no puede desincronizarlos escribiendo encima).
+- **Verificado en el navegador**: cambiar 100g→150g de "Huevos revueltos" recalculó 160→240 kcal y los 3 macros proporcionalmente; "Cancelar" restauró los valores originales sin guardar.
+
+### Post-MVP — Cantidad dinámica por alimento: gramos o unidades
+El usuario pidió que la cantidad se edite en la unidad natural de cada alimento — gramos para arroz/frijoles/carne, pero **unidades** para algo que se cuenta por piezas (huevo, uva, tortilla...), en vez de forzar todo a gramos.
+- **Migración `0003_unidad_medida.sql`**: agrega `unidad_medida` (`'gramos' | 'unidad'`, default `'gramos'`) y `gramos_por_unidad` (nullable, el peso promedio de una pieza) a `foods` y a `meal_entries`. **El usuario ya la corrió** en el SQL Editor de Supabase. Todo lo existente antes de la migración queda en `'gramos'` por default — no se reclasificó el catálogo viejo retroactivamente.
+- **Prompts de Gemini** (`PROMPT_ANALIZAR_PLATO` y el prompt de `analyzeTextWithGemini`): ahora piden, por cada alimento, `unidad_medida` y (si aplica) `gramos_por_unidad`, con la regla explícita "unidad si se cuenta por piezas discretas (huevo, uva, tortilla, rebanada), gramos para todo lo demás". El prompt de etiqueta nutricional no se tocó (una etiqueta ya trae su propia porción fija, no aplica el concepto de unidades sueltas).
+- **`upsertFoodIfNew`, `addMealEntriesDesdeIA`, `analizarDescripcionComida`** (`diario/actions.ts`): ahora leen/escriben `unidad_medida`/`gramos_por_unidad` en `foods` y `meal_entries`. Cuando un alimento ya existe en el catálogo local, su `unidad_medida` guardada manda (no la de la nueva estimación de Gemini).
+- **`AgregarComida.tsx`** (pantalla de revisión antes de guardar): el campo de cantidad muestra "Unidades" o "Gramos" según el alimento, y al cambiarlo recalcula calorías/macros con la densidad actual del ítem (misma lógica que el detalle de edición).
+- **`MealEntryItem.tsx`** (edición de una entrada ya guardada): mismo comportamiento — "Cantidad (unidades)" vs "Cantidad (gramos)" según `entry.unidad_medida`, convirtiendo unidades↔gramos internamente (la base de datos siempre guarda `cantidad_gramos`).
+- **`lib/utils/cantidad.ts`** (nuevo): `formatCantidad(entry)` centraliza cómo se muestra la cantidad ("3 unidades" vs "150g"), usado tanto en `MealEntryItem` como en la lista de solo lectura de días pasados en `diario/page.tsx`.
+- **Verificado en el navegador**: descripción "200 gramos de arroz, 2 huevos duros y 8 uvas" → "Arroz cocido" quedó en gramos (200), "Huevo duro" y "Uvas" en unidades (2 y 8); cambiar "Huevo duro" de 2→3 en la pantalla de revisión recalculó 155→233 kcal. Se guardó una entrada real de "uva" (4 unidades) y se editó a 8 unidades desde el diario — recalculó 13.8→28 kcal correctamente. Se limpió la entrada de prueba al terminar (el alimento "uva" queda en el catálogo, igual que otras entradas de prueba anteriores).
+
 ## Cómo mandar cambios (flujo normal de trabajo)
 
 Con el repo en GitHub y Vercel conectado, mandar un cambio a producción es:

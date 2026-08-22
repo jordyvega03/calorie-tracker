@@ -8,7 +8,7 @@ import {
   analizarDescripcionComida,
 } from "@/app/(dashboard)/diario/actions";
 import { inputClass, primaryButtonClass } from "@/lib/utils/styles";
-import type { TipoComida } from "@/types/database";
+import type { TipoComida, UnidadMedida } from "@/types/database";
 
 type ModoEntrada = "foto" | "texto";
 type ModoFoto = "plato" | "etiqueta";
@@ -20,8 +20,14 @@ type Item = {
   proteina: number;
   carbos: number;
   grasas: number;
+  unidad_medida: UnidadMedida;
+  gramos_por_unidad: number | null;
   incluir: boolean;
 };
+
+function redondear2(valor: number) {
+  return Math.round(valor * 100) / 100;
+}
 
 const TIPOS: { value: TipoComida; label: string }[] = [
   { value: "desayuno", label: "Desayuno" },
@@ -123,6 +129,8 @@ export default function AgregarComida() {
           proteina_g: number;
           carbos_g: number;
           grasas_g: number;
+          unidad_medida: UnidadMedida;
+          gramos_por_unidad: number | null;
         }[];
         setItems(
           alimentos.map((a) => ({
@@ -132,6 +140,8 @@ export default function AgregarComida() {
             proteina: a.proteina_g,
             carbos: a.carbos_g,
             grasas: a.grasas_g,
+            unidad_medida: a.unidad_medida,
+            gramos_por_unidad: a.gramos_por_unidad,
             incluir: true,
           }))
         );
@@ -152,6 +162,8 @@ export default function AgregarComida() {
             proteina: r.proteina_g,
             carbos: r.carbos_g,
             grasas: r.grasas_g,
+            unidad_medida: "gramos",
+            gramos_por_unidad: null,
             incluir: true,
           },
         ]);
@@ -186,6 +198,39 @@ export default function AgregarComida() {
       ...copia[i],
       [campo]: esNumerico ? Number(valor) : valor,
     } as Item;
+    setItems(copia);
+  }
+
+  // La cantidad se edita en la unidad natural del alimento (gramos, o
+  // unidades si es algo que se cuenta por piezas como huevo/uva) y las
+  // calorías/macros se reescalan a partir de la densidad actual del ítem,
+  // igual que al editar una entrada ya guardada del diario.
+  function actualizarCantidad(i: number, valorMostrado: string) {
+    if (!items) return;
+    const item = items[i];
+    const gramosAnteriores = item.cantidad_gramos || 1;
+    const densidad = {
+      calorias: item.calorias / gramosAnteriores,
+      proteina: item.proteina / gramosAnteriores,
+      carbos: item.carbos / gramosAnteriores,
+      grasas: item.grasas / gramosAnteriores,
+    };
+
+    const valor = Number(valorMostrado) || 0;
+    const nuevosGramos =
+      item.unidad_medida === "unidad" && item.gramos_por_unidad
+        ? valor * item.gramos_por_unidad
+        : valor;
+
+    const copia = [...items];
+    copia[i] = {
+      ...item,
+      cantidad_gramos: nuevosGramos,
+      calorias: Math.round(densidad.calorias * nuevosGramos),
+      proteina: Math.round(densidad.proteina * nuevosGramos),
+      carbos: Math.round(densidad.carbos * nuevosGramos),
+      grasas: Math.round(densidad.grasas * nuevosGramos),
+    };
     setItems(copia);
   }
 
@@ -459,10 +504,17 @@ export default function AgregarComida() {
                   />
                   <input
                     type="number"
-                    value={item.cantidad_gramos}
-                    onChange={(e) => actualizarItem(i, "cantidad_gramos", e.target.value)}
-                    placeholder="Gramos"
-                    aria-label="Cantidad en gramos"
+                    step="any"
+                    value={
+                      item.unidad_medida === "unidad" && item.gramos_por_unidad
+                        ? redondear2(item.cantidad_gramos / item.gramos_por_unidad)
+                        : item.cantidad_gramos
+                    }
+                    onChange={(e) => actualizarCantidad(i, e.target.value)}
+                    placeholder={item.unidad_medida === "unidad" ? "Unidades" : "Gramos"}
+                    aria-label={
+                      item.unidad_medida === "unidad" ? "Cantidad en unidades" : "Cantidad en gramos"
+                    }
                     className={inputClass}
                   />
                   <input

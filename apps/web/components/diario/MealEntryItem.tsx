@@ -3,15 +3,31 @@
 import { useState } from "react";
 import { updateMealEntry, deleteMealEntry } from "@/app/(dashboard)/diario/actions";
 import { inputClass, primaryButtonClass } from "@/lib/utils/styles";
+import { formatCantidad } from "@/lib/utils/cantidad";
 import type { MealEntry } from "@/types/database";
 
 function aNumero(valor: string) {
   return Number(valor) || 0;
 }
 
+function redondear2(valor: number) {
+  return Math.round(valor * 100) / 100;
+}
+
 export default function MealEntryItem({ entry }: { entry: MealEntry }) {
+  // Si el alimento se mide por unidades (huevo, uva, tortilla...) se edita
+  // por cantidad de piezas; si no, por gramos directo. La cantidad guardada
+  // en la base siempre es en gramos (cantidad_gramos), esto solo cambia
+  // cómo se muestra/edita.
+  const esUnidad = entry.unidad_medida === "unidad" && !!entry.gramos_por_unidad;
+  const gramosPorUnidad = entry.gramos_por_unidad ?? 1;
+
+  function gramosACantidad(g: number) {
+    return esUnidad ? String(redondear2(g / gramosPorUnidad)) : String(g);
+  }
+
   const [editando, setEditando] = useState(false);
-  const [gramos, setGramos] = useState(String(entry.cantidad_gramos));
+  const [cantidad, setCantidad] = useState(() => gramosACantidad(entry.cantidad_gramos));
   const [calorias, setCalorias] = useState(String(entry.calorias));
   const [proteina, setProteina] = useState(String(entry.proteina ?? 0));
   const [carbos, setCarbos] = useState(String(entry.carbos ?? 0));
@@ -30,9 +46,9 @@ export default function MealEntryItem({ entry }: { entry: MealEntry }) {
     grasas: (entry.grasas ?? 0) / gramosBase,
   };
 
-  function cambiarGramos(valor: string) {
-    setGramos(valor);
-    const g = aNumero(valor);
+  function cambiarCantidad(valor: string) {
+    setCantidad(valor);
+    const g = esUnidad ? aNumero(valor) * gramosPorUnidad : aNumero(valor);
     setCalorias(String(Math.round(densidad.calorias * g)));
     setProteina(String(Math.round(densidad.proteina * g)));
     setCarbos(String(Math.round(densidad.carbos * g)));
@@ -42,7 +58,7 @@ export default function MealEntryItem({ entry }: { entry: MealEntry }) {
   function cancelar() {
     setEditando(false);
     setError(null);
-    setGramos(String(entry.cantidad_gramos));
+    setCantidad(gramosACantidad(entry.cantidad_gramos));
     setCalorias(String(entry.calorias));
     setProteina(String(entry.proteina ?? 0));
     setCarbos(String(entry.carbos ?? 0));
@@ -53,9 +69,10 @@ export default function MealEntryItem({ entry }: { entry: MealEntry }) {
     setGuardando(true);
     setError(null);
     try {
+      const cantidadGramos = esUnidad ? aNumero(cantidad) * gramosPorUnidad : aNumero(cantidad);
       await updateMealEntry(entry.id, {
         nombre: entry.nombre_libre ?? "",
-        cantidadGramos: aNumero(gramos),
+        cantidadGramos,
         calorias: aNumero(calorias),
         proteina: aNumero(proteina),
         carbos: aNumero(carbos),
@@ -91,7 +108,7 @@ export default function MealEntryItem({ entry }: { entry: MealEntry }) {
           <span className="leading-relaxed text-slate-700 dark:text-slate-300">
             {entry.nombre_libre}{" "}
             <span className="text-slate-400">
-              — {entry.cantidad_gramos}g — {entry.calorias} kcal
+              — {formatCantidad(entry)} — {entry.calorias} kcal
             </span>
           </span>
           <span className="shrink-0 text-xs font-medium text-emerald-600 dark:text-emerald-400">
@@ -109,13 +126,13 @@ export default function MealEntryItem({ entry }: { entry: MealEntry }) {
       </p>
 
       <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">
-        Cantidad (gramos)
+        Cantidad ({esUnidad ? "unidades" : "gramos"})
         <input
           type="number"
           step="any"
-          value={gramos}
-          onChange={(e) => cambiarGramos(e.target.value)}
-          aria-label="Cantidad en gramos"
+          value={cantidad}
+          onChange={(e) => cambiarCantidad(e.target.value)}
+          aria-label={esUnidad ? "Cantidad en unidades" : "Cantidad en gramos"}
           className={`mt-1 w-full ${inputClass}`}
         />
       </label>

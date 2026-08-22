@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/rsc";
 import { cardClass } from "@/lib/utils/styles";
+import { formatCantidad } from "@/lib/utils/cantidad";
 import { hoyGuatemala, semanaActualGuatemala } from "@/lib/utils/date";
 import AgregarComida from "@/components/diario/AgregarComida";
 import SemanaTira from "@/components/diario/SemanaTira";
@@ -100,7 +101,7 @@ export default async function DiarioPage({
                         <span className="leading-relaxed text-slate-700 dark:text-slate-300">
                           {e.nombre_libre}{" "}
                           <span className="text-slate-400">
-                            — {e.cantidad_gramos}g — {e.calorias} kcal
+                            — {formatCantidad(e)} — {e.calorias} kcal
                           </span>
                         </span>
                       </li>

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/rsc";
 import { hoyGuatemala, horaActualGuatemala } from "@/lib/utils/date";
 import { analyzeTextWithGemini } from "@/lib/ai/gemini";
-import type { OrigenRegistro, TipoComida } from "@/types/database";
+import type { OrigenRegistro, TipoComida, UnidadMedida } from "@/types/database";
 
 type ItemDetectado = {
   nombre: string;
@@ -13,6 +13,8 @@ type ItemDetectado = {
   proteina: number;
   carbos: number;
   grasas: number;
+  unidad_medida: UnidadMedida;
+  gramos_por_unidad: number | null;
 };
 
 type SupabaseClient = ReturnType<typeof createClient>;
@@ -47,57 +49,10 @@ async function upsertFoodIfNew(
     carbos_100g: Math.round(item.carbos * factor),
     grasas_100g: Math.round(item.grasas * factor),
     fuente,
+    unidad_medida: item.unidad_medida,
+    gramos_por_unidad: item.gramos_por_unidad,
     created_by: userId,
   });
-}
-
-export async function addMealEntry(input: {
-  nombre: string;
-  tipoComida: TipoComida;
-  cantidadGramos: number;
-  calorias: number;
-  proteina: number;
-  carbos: number;
-  grasas: number;
-}) {
-  const supabase = createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado");
-
-  const { error } = await supabase.from("meal_entries").insert({
-    user_id: user.id,
-    nombre_libre: input.nombre,
-    tipo_comida: input.tipoComida,
-    cantidad_gramos: input.cantidadGramos,
-    calorias: input.calorias,
-    proteina: input.proteina,
-    carbos: input.carbos,
-    grasas: input.grasas,
-    origen: "manual",
-    fecha: hoyGuatemala(),
-    hora: horaActualGuatemala(),
-  });
-
-  if (error) throw new Error(error.message);
-
-  await upsertFoodIfNew(
-    supabase,
-    user.id,
-    {
-      nombre: input.nombre,
-      cantidad_gramos: input.cantidadGramos,
-      calorias: input.calorias,
-      proteina: input.proteina,
-      carbos: input.carbos,
-      grasas: input.grasas,
-    },
-    "manual"
-  );
-
-  revalidatePath("/diario");
 }
 
 const FUENTE_POR_ORIGEN: Record<
@@ -139,6 +94,8 @@ export async function addMealEntriesDesdeIA(input: {
     proteina: item.proteina,
     carbos: item.carbos,
     grasas: item.grasas,
+    unidad_medida: item.unidad_medida,
+    gramos_por_unidad: item.gramos_por_unidad,
     origen: input.origen,
     foto_url: input.fotoUrl,
     fecha,
@@ -179,7 +136,9 @@ export async function analizarDescripcionComida(descripcion: string) {
     alimentos.map(async (item) => {
       const { data: local } = await supabase
         .from("foods")
-        .select("nombre, calorias_100g, proteina_100g, carbos_100g, grasas_100g")
+        .select(
+          "nombre, calorias_100g, proteina_100g, carbos_100g, grasas_100g, unidad_medida, gramos_por_unidad"
+        )
         .ilike("nombre", item.nombre.trim())
         .limit(1)
         .maybeSingle();
@@ -193,6 +152,8 @@ export async function analizarDescripcionComida(descripcion: string) {
           proteina: Math.round((local.proteina_100g ?? 0) * factor),
           carbos: Math.round((local.carbos_100g ?? 0) * factor),
           grasas: Math.round((local.grasas_100g ?? 0) * factor),
+          unidad_medida: local.unidad_medida,
+          gramos_por_unidad: local.gramos_por_unidad,
         };
       }
 
@@ -203,6 +164,8 @@ export async function analizarDescripcionComida(descripcion: string) {
         proteina: item.proteina_g,
         carbos: item.carbos_g,
         grasas: item.grasas_g,
+        unidad_medida: item.unidad_medida,
+        gramos_por_unidad: item.gramos_por_unidad,
       };
     })
   );
